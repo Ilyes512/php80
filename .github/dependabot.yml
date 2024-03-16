@@ -1,0 +1,20 @@
+# For all configuration options:
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: "daily"
+    ignore:
+      - dependency-name: '*'
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      docker-updates:
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
