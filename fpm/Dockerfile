@@ -48,6 +48,8 @@ RUN apt-get update \
         # Dependency of PHP memcached-extension
         libmemcached11 \
         zlib1g \
+        # Dependency of PHP gmp-extension
+        libgmp10 \
     # Install packages that are needed for building PHP extensions
     && apt-get install --assume-yes --no-install-recommends \
         $PHPIZE_DEPS \
@@ -74,6 +76,8 @@ RUN apt-get update \
         # Dependency of PHP memcached-extension
         libmemcached-dev \
         zlib1g-dev \
+        # Dependency of PHP gmp-extension
+        libgmp-dev \
     # Configure PHP gd-extension
     && docker-php-ext-configure gd \
         --enable-gd \
@@ -92,6 +96,7 @@ RUN apt-get update \
         zip \
         soap \
         xsl \
+        gmp \
         # Dependency of PHP event-extension
         sockets \
     && pecl install "event-$PHP_EVENT_VERSION" \
@@ -124,6 +129,7 @@ RUN apt-get update \
         libxslt1-dev \
         libmemcached-dev \
         zlib1g-dev \
+        libgmp-dev \
     # Cleanup
     && rm -rf /var/www/* \
     && apt-get autoremove --assume-yes \
