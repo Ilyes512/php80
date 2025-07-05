@@ -4,21 +4,24 @@ FROM php:8.0.30-apache-bullseye AS runtime
 ARG UNIQUE_ID_FOR_CACHEFROM=runtime
 
 # Latest version of event-extension: https://pecl.php.net/package/event
-ARG PHP_EVENT_VERSION=3.1.3
+ARG PHP_EVENT_VERSION=3.1.4
 # Latest version of igbinary-extension: https://pecl.php.net/package/igbinary
-ARG PHP_IGBINARY_VERSION=3.2.15
+ARG PHP_IGBINARY_VERSION=3.2.16
 # Latest version of redis-extension: https://pecl.php.net/package/redis
-ARG PHP_REDIS_VERSION=6.0.2
+ARG PHP_REDIS_VERSION=6.2.0
+# Latest version of memcached-extension: https://pecl.php.net/package/memcached
+ARG PHP_MEMCACHED_VERSION=3.3.0
 # Latest version of amqp-extension: https://pecl.php.net/package/amqp
 ARG PHP_AMQP_VERSION=2.1.2
 
-ENV SMTPHOST mail
-ENV SMTPEHLO localhost
+ENV SMTPHOST=mail
+ENV SMTPEHLO=localhost
 
 WORKDIR /var/www
 
 RUN apt-get update \
     && apt-get install --assume-yes --no-install-recommends \
+        apt-transport-https \
         ca-certificates \
         openssl \
         curl \
@@ -42,6 +45,9 @@ RUN apt-get update \
         librabbitmq4 \
         # Dependency of PHP xsl-extension
         libxslt1.1 \
+        # Dependency of PHP memcached-extension
+        libmemcached11 \
+        zlib1g \
     # Install packages that are needed for building PHP extensions
     && apt-get install --assume-yes --no-install-recommends \
         $PHPIZE_DEPS \
@@ -65,6 +71,9 @@ RUN apt-get update \
         librabbitmq-dev \
         # Dependency of PHP xsl-extension
         libxslt1-dev \
+        # Dependency of PHP memcached-extension
+        libmemcached-dev \
+        zlib1g-dev \
     # Configure PHP gd-extension
     && docker-php-ext-configure gd \
         --enable-gd \
@@ -89,11 +98,13 @@ RUN apt-get update \
     # Optional dependency of PHP redis-extension
     && pecl install "igbinary-$PHP_IGBINARY_VERSION" \
     && pecl install --configureoptions 'enable-redis-igbinary="yes"' "redis-$PHP_REDIS_VERSION" \
+    && pecl install --configureoptions 'enable-memcached-igbinary="yes"' "memcached-$PHP_MEMCACHED_VERSION" \
     && pecl install "amqp-$PHP_AMQP_VERSION" \
     && docker-php-ext-enable --ini-name docker-php-ext-zz-custom.ini \
         event \
         igbinary \
         redis \
+        memcached \
         amqp \
     && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
     # Purge packages that where only needed for building php extensions
@@ -110,6 +121,9 @@ RUN apt-get update \
         libxml2-dev \
         libpq-dev \
         librabbitmq-dev \
+        libxslt1-dev \
+        libmemcached-dev \
+        zlib1g-dev \
     # Cleanup
     && rm -rf /var/www/* \
     && apt-get autoremove --assume-yes \
@@ -124,13 +138,13 @@ FROM runtime AS builder
 ARG UNIQUE_ID_FOR_CACHEFROM=builder
 
 # Latest version of Phive: https://api.github.com/repos/phar-io/phive/releases/latest
-ARG PHIVE_VERSION=0.15.2
+ARG PHIVE_VERSION=0.16.0
 # Latest version of Composer: https://getcomposer.org/download
-ARG COMPOSER_VERSION=2.7.1
+ARG COMPOSER_VERSION=2.8.9
 # Latest version of Xdebug: https://github.com/xdebug/xdebug/tags or https://pecl.php.net/package/xdebug
-ARG XDEBUG_VERSION=3.3.1
+ARG XDEBUG_VERSION=3.4.4
 # Latest version of pcov: https://github.com/krakjoe/pcov/tags or https://pecl.php.net/package/pcov
-ARG PCOV_VERSION=1.0.11
+ARG PCOV_VERSION=1.0.12
 
 RUN apt-get update \
     && apt-get install --assume-yes --no-install-recommends \
@@ -169,48 +183,34 @@ RUN apt-get update \
 
 FROM builder AS builder_nodejs
 
+ARG TARGETARCH
+
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG UNIQUE_ID_FOR_CACHEFROM=builder_nodejs
 
 # Latest version of Node.js: https://nodejs.org
-ARG NODE_MAJOR=20
+ARG NODE_MAJOR=22
 
 RUN apt-get update \
     && apt-get install --assume-yes --no-install-recommends \
         gcc \
         g++ \
         make \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && mkdir -p /usr/share/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /usr/share/keyrings/nodesource.gpg \
+    && chmod 644 /usr/share/keyrings/nodesource.gpg \
+    && echo "deb [arch=$TARGETARCH signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && echo "Package: nodejs" | tee /etc/apt/preferences.d/nodejs > /dev/null \
+    && echo "Pin: origin deb.nodesource.com" | tee -a /etc/apt/preferences.d/nodejs > /dev/null \
+    && echo "Pin-Priority: 600" | tee -a /etc/apt/preferences.d/nodejs > /dev/null \
     && apt-get update \
     && apt-get install --assume-yes --no-install-recommends \
         nodejs \
     && npm uninstall --global npm \
-    && corepack install --global --all \
+    && corepack install --global npm@10.x yarn@4.x pnpm@9.x \
     && corepack enable npm yarn pnpm \
     && apt-get autoremove --assume-yes \
     && apt-get clean --assume-yes \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /tmp/*
-
-FROM builder_nodejs AS vscode
-
-ARG UNIQUE_ID_FOR_CACHEFROM=vscode
-
-RUN apt-get update \
-    && apt-get install --assume-yes --no-install-recommends \
-        openssh-client \
-        sudo \
-        # VSCode Live Share Extension dependencies
-        libicu67 \
-        libkrb5-3 \
-        zlib1g \
-        gnome-keyring \
-        libsecret-1-0 \
-        desktop-file-utils \
-        x11-utils \
-    && apt-get autoremove --assume-yes \
-    && apt-get clean --assume-yes \
-    && rm -rf /var/lib/apt/lists/*
