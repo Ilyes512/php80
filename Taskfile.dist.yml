@@ -1,12 +1,15 @@
 version: "3"
 
-silent: true
-
 vars:
   DOCKER_REPO: ghcr.io
   DOCKER_OWNER: ilyes512
   # Latatest version of Hadolint: https://hub.docker.com/r/hadolint/hadolint/tags or https://github.com/hadolint/hadolint/releases
   HADOLINT_TAG_VERSION: v2.12.0
+
+# env:
+#   BUILDKIT_PROGRESS: plain
+
+silent: true
 
 tasks:
 
@@ -38,11 +41,6 @@ tasks:
           TARGET: builder_nodejs
           DOCKER_IMAGE_NAME: '{{.DOCKER_IMAGE_NAME}}'
           DOCKER_FILE_PATH: '{{.DOCKER_FILE_PATH}}'
-      - task: build:target
-        vars:
-          TARGET: vscode
-          DOCKER_IMAGE_NAME: '{{.DOCKER_IMAGE_NAME}}'
-          DOCKER_FILE_PATH: '{{.DOCKER_FILE_PATH}}'
 
   build:apache:
     desc: Build all PHP Docker image targets of the Apache variant
@@ -66,11 +64,6 @@ tasks:
           TARGET: builder_nodejs
           DOCKER_IMAGE_NAME: '{{.DOCKER_IMAGE_NAME}}'
           DOCKER_FILE_PATH: '{{.DOCKER_FILE_PATH}}'
-      - task: build:target
-        vars:
-          TARGET: vscode
-          DOCKER_IMAGE_NAME: '{{.DOCKER_IMAGE_NAME}}'
-          DOCKER_FILE_PATH: '{{.DOCKER_FILE_PATH}}'
 
   build:target:
     preconditions:
@@ -78,8 +71,7 @@ tasks:
           test '{{.TARGET}}' = 'runtime'
           -o '{{.TARGET}}' = 'builder'
           -o '{{.TARGET}}' = 'builder_nodejs'
-          -o '{{.TARGET}}' = 'vscode'
-        msg: TARGET needs to contain the Docker TARGET [runtime, builder, builder_nodejs, vscode]
+        msg: TARGET needs to contain the Docker TARGET [runtime, builder, builder_nodejs]
     vars:
       VERSION: '{{.VERSION | default "latest"}}'
     cmds:
@@ -88,6 +80,8 @@ tasks:
         --tag {{.DOCKER_REPO}}/{{.DOCKER_OWNER}}/{{.DOCKER_IMAGE_NAME}}:{{.TARGET}}-{{.VERSION}}
         --file {{.DOCKER_FILE_PATH}}
         .
+    requires:
+      vars: [DOCKER_IMAGE_NAME, TARGET, DOCKER_FILE_PATH]
 
   lint:fpm:
     desc: Apply a Dockerfile linter (https://github.com/hadolint/hadolint)
@@ -102,8 +96,6 @@ tasks:
         vars: { DOCKERFILE_PATH: apache/Dockerfile }
 
   lint:
-    vars:
-      DOCKERFILE_PATH: '{{.DOCKERFILE_PATH}}'
     cmds:
       - docker run
         --interactive
@@ -113,6 +105,8 @@ tasks:
         hadolint
         -
         < {{.DOCKERFILE_PATH}}
+    requires:
+      vars: [DOCKERFILE_PATH]
 
   shell:fpm:
     desc: Interactive shell
